@@ -16,6 +16,7 @@ try {
 
 var node_http = require('http'),
     node_url  = require('url'),
+    node_zlib = require('zlib'),
     pcap      = require("pcap"), pcap_session,
     ANSI,
     options   = {};
@@ -134,6 +135,36 @@ function format_obj(obj) {
         }
     }).join('\n');
 }
+
+function format_body(headers, data) {
+    ce = headers["Content-Encoding"];
+    switch (ce) {
+        case "gzip":
+        case "deflate":
+            //console.log("found encoded body: "+headers["Content-Encoding"]);
+            node_zlib.unzip(data, function(err, result) {
+                if (err) {
+                    console.log(ANSI(ce + "-encoded body could not be decoded", "green"));
+                } else {
+                    log_body(result, ce);
+                }
+            });
+            break;
+        default:
+            log_body(data);
+            break;
+    }
+}
+
+function log_body(data, enconding) {
+    try {
+        obj = JSON.parse(data);
+        console.log((ce ? ce + " / " : "") + "JSON: " + util.inspect(obj, true, null, true));
+    } catch (err) {
+        console.log((ce ? ce + ": " : "") + ANSI(data.toString("utf8"), "green"));
+    }
+}
+
 
 function usage_die(message) {
     if (message) {
@@ -419,7 +450,8 @@ function setup_listeners() {
 
         if (options.bodies && !http.request.binary_body) {
             // TODO - this is not at all what you want for gzipped data
-            console.log(ANSI(data.toString("utf8"), "green"));
+            format_body(http.request.headers, data);
+
         }
     });
 
@@ -459,7 +491,8 @@ function setup_listeners() {
 
         if (options.bodies && !http.response.binary_body) {
             // TODO - this is not at all what you want for gzipped or binary data
-            console.log(ANSI(data.toString("utf8"), "green"));
+            format_body(http.response.headers, data);
+            //console.log(ANSI(data.toString("utf8"), "green"));
         }
     });
 
